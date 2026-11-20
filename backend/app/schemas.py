@@ -143,6 +143,19 @@ class WatermarkTrackEntry(BaseModel):
     field_5: str | None = None  # 延迟记录数
     field_6: str | None = None  # 消费偏移
     field_7: str | None = None  # 检查时间
+    field_8: str | None = None  # 检查版本
+
+class WatermarkCorrectionEntry(BaseModel):
+    """水位纠正回执明细结构。"""
+
+    field_0: str | None = None  # 回执编号
+    field_1: str | None = None  # 数据主题
+    field_2: str | None = None  # 分区编号
+    field_3: str | None = None  # 标记编号
+    field_4: str | None = None  # 旧检查版本
+    field_5: str | None = None  # 检查版本
+    field_6: str | None = None  # 冲突判定
+    field_7: str | None = None  # 最后成功位置
 
 class DeadLetterEntry(BaseModel):
     """死信记录明细结构。"""

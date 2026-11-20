@@ -1,4 +1,8 @@
-"""水位追踪接口：维护水位标记，覆盖标记正常、标记滞后、停用追踪等动作。"""
+"""水位追踪接口：维护水位标记，覆盖标记正常、标记滞后、停用追踪等动作。
+
+增强：按分区定位颠倒记录（消费偏移前进但事件时间水位倒退），
+上报读数、触发水位纠正并查询水位纠正回执。
+"""
 from __future__ import annotations
 
 import csv
@@ -14,7 +18,7 @@ router = APIRouter(prefix="/api/watermark_track", tags=["水位追踪"])
 
 service = WatermarkTrackService()
 
-LIST_FIELDS = ["标记编号", "数据主题", "分区编号", "事件时间水位", "处理时间水位", "延迟记录数", "消费偏移", "检查时间"]
+LIST_FIELDS = ["标记编号", "数据主题", "分区编号", "事件时间水位", "处理时间水位", "延迟记录数", "消费偏移", "检查时间", "检查版本"]
 STATUSES = ["草稿", "正常", "滞后", "已停用"]
 
 
@@ -32,12 +36,16 @@ def list_entries(
     request: Request,
     keyword: str | None = Query(default=None, description="按标记编号检索"),
     status: str | None = Query(default=None, description="草稿、正常、滞后、已停用"),
+    inverted: bool | None = Query(default=None, description="只看颠倒记录"),
+    sort: str | None = Query(default=None, description="排序字段"),
+    order: str = Query(default="asc", description="asc 或 desc"),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=200),
 ) -> PageResult[dict]:
     """按页面字段、标记编号关键字与状态过滤水位追踪列表。"""
     items, total = service.list_entries(
-        filters=query_filters(request), keyword=keyword, status=status, page=page, size=size)
+        filters=query_filters(request), keyword=keyword, status=status,
+        inverted=inverted, sort=sort, order=order, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
 
 
@@ -51,7 +59,7 @@ def export_entries(
     items, _ = service.list_entries(
         filters=query_filters(request), keyword=keyword, status=status, page=1, size=1000000)
     output = io.StringIO()
-    output.write("\ufeff")
+    output.write("﻿")
     writer = csv.writer(output, lineterminator="\n")
     writer.writerow(["id", *LIST_FIELDS, "status"])
     for item in items:
@@ -74,6 +82,15 @@ def get_entry(entry_id: int) -> dict:
     return entry
 
 
+@router.get("/{entry_id}/corrections")
+def list_corrections(entry_id: int) -> dict:
+    """读取该水位标记关联的水位纠正回执（保留旧检查版本与受影响窗口）。"""
+    receipts = service.list_corrections(entry_id)
+    if receipts is None:
+        raise HTTPException(status_code=404, detail=f"水位标记 {entry_id} 不存在或已归档")
+    return {"items": receipts, "total": len(receipts)}
+
+
 @router.post("", response_model=ActionResult)
 def create_entry(payload: dict[str, object]) -> ActionResult:
     """登记一条水位标记，缺字段时说明原因而不是静默丢弃。"""
@@ -90,3 +107,23 @@ def run_action(entry_id: int, payload: ActionPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
+
+
+@router.post("/{entry_id}/report")
+def report_reading(entry_id: int, payload: dict[str, object]) -> dict:
+    """上报新读数：正常前进直接接受；倒退或版本冲突进入水位纠正链路。"""
+    entry, receipt, message = service.report_reading(entry_id, payload)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=message)
+    return {"ok": True, "message": message, "entry": entry, "receipt": receipt}
+
+
+@router.post("/{entry_id}/correct")
+def correct_entry(entry_id: int) -> dict:
+    """触发水位纠正：读取双水位记录生成回执，向前修正并交付流式质量。"""
+    entry, receipt, message = service.correct_entry(entry_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=message)
+    if receipt is None:
+        return {"ok": False, "message": message, "entry": entry, "receipt": None}
+    return {"ok": True, "message": message, "entry": entry, "receipt": receipt}

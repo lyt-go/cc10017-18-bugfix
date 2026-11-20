@@ -15,6 +15,7 @@ from app.routers import lake_partition as router_lake_partition
 from app.routers import stream_quality as router_stream_quality
 from app.routers import iceberg_table as router_iceberg_table
 from app.routers import watermark_track as router_watermark_track
+from app.routers import watermark_correction as router_watermark_correction
 from app.routers import dead_letter as router_dead_letter
 from app.routers import materialized_view as router_materialized_view
 from app.routers import change_capture as router_change_capture
@@ -26,4 +27,4 @@ from app.routers import ttl_policy as router_ttl_policy
 from app.routers import realtime_metrics as router_realtime_metrics
 from app.routers import pipeline as router_pipeline
 
-ROUTERS = [router_topic_registry, router_flink_job, router_kafka_connector, router_schema_evolve, router_upsert_merge, router_lake_partition, router_stream_quality, router_iceberg_table, router_watermark_track, router_dead_letter, router_materialized_view, router_change_capture, router_compact_policy, router_stream_lineage, router_backfill_stream, router_sink_dispatch, router_ttl_policy, router_realtime_metrics, router_pipeline]
+ROUTERS = [router_topic_registry, router_flink_job, router_kafka_connector, router_schema_evolve, router_upsert_merge, router_lake_partition, router_stream_quality, router_iceberg_table, router_watermark_track, router_watermark_correction, router_dead_letter, router_materialized_view, router_change_capture, router_compact_policy, router_stream_lineage, router_backfill_stream, router_sink_dispatch, router_ttl_policy, router_realtime_metrics, router_pipeline]

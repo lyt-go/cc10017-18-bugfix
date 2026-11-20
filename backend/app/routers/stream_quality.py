@@ -32,12 +32,15 @@ def list_entries(
     request: Request,
     keyword: str | None = Query(default=None, description="按规则编号检索"),
     status: str | None = Query(default=None, description="草稿、待校验、已生效、已停用"),
+    sort: str | None = Query(default=None, description="排序字段"),
+    order: str = Query(default="asc", description="asc 或 desc"),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=200),
 ) -> PageResult[dict]:
     """按页面字段、规则编号关键字与状态过滤流式质量列表。"""
     items, total = service.list_entries(
-        filters=query_filters(request), keyword=keyword, status=status, page=page, size=size)
+        filters=query_filters(request), keyword=keyword, status=status,
+        sort=sort, order=order, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
 
 
@@ -90,3 +93,21 @@ def run_action(entry_id: int, payload: ActionPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
+
+
+@router.post("/{entry_id}/recheck")
+def recheck_entry(entry_id: int) -> dict:
+    """重新检查：消费该规则主题下的水位纠正回执，重新检查受影响窗口。"""
+    summary, message = service.recheck_entry(entry_id)
+    if summary is None:
+        return {"ok": False, "message": message, "summary": None}
+    return {"ok": True, "message": message, "summary": summary}
+
+
+@router.get("/{entry_id}/checks")
+def list_checks(entry_id: int) -> dict:
+    """读取该规则的检查记录（含回执重检的受影响窗口与检查版本）。"""
+    if service.get_entry(entry_id) is None:
+        raise HTTPException(status_code=404, detail=f"质量规则 {entry_id} 不存在或已归档")
+    items = service.get_quality_results(entry_id)
+    return {"items": items, "total": len(items)}
